@@ -79,7 +79,7 @@ class TransferService:
         principal.require("samples.write")
         before = self.samples.get(sample_id)
         target = self.locations.get(data["location_id"])
-        if before["lifecycle_state"] in {"loaned", "pending_destruction", "destroyed"}:
+        if before["lifecycle_state"] in {"loaned", "pending_destruction", "destroyed", "quarantined"}:
             raise ConflictError("当前状态禁止转移保管位置")
         if before["location_id"] == target["id"]:
             return {"sample": before, "replayed": True}

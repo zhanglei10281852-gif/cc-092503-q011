@@ -335,6 +335,97 @@ CREATE TABLE IF NOT EXISTS sample_events (
     occurred_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_sample_events_sample ON sample_events(sample_id, id);
+
+CREATE TABLE IF NOT EXISTS investigation_cases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_code TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    hypothesis TEXT NOT NULL DEFAULT '',
+    severity TEXT NOT NULL CHECK(severity IN ('low','medium','high','critical')),
+    status TEXT NOT NULL CHECK(status IN ('open','investigating','measures_applied','release_pending','closed','dismissed')),
+    owner_user_id INTEGER NOT NULL REFERENCES users(id),
+    due_at TEXT,
+    overdue INTEGER NOT NULL DEFAULT 0 CHECK(overdue IN (0,1)),
+    close_requested_by INTEGER REFERENCES users(id),
+    close_requested_at TEXT,
+    close_note TEXT NOT NULL DEFAULT '',
+    dismiss_reason TEXT,
+    closed_at TEXT,
+    version INTEGER NOT NULL DEFAULT 1,
+    created_by INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS investigation_case_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id INTEGER NOT NULL REFERENCES investigation_cases(id) ON DELETE CASCADE,
+    anomaly_id INTEGER NOT NULL REFERENCES anomaly_cases(id),
+    status TEXT NOT NULL CHECK(status IN ('candidate','confirmed','dismissed')),
+    basis_json TEXT NOT NULL DEFAULT '[]',
+    basis_detail_json TEXT NOT NULL DEFAULT '{}',
+    confirmed_by INTEGER REFERENCES users(id),
+    confirmed_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(case_id, anomaly_id)
+);
+CREATE INDEX IF NOT EXISTS idx_investigation_links_case ON investigation_case_links(case_id, status, anomaly_id);
+
+CREATE TABLE IF NOT EXISTS investigation_case_samples (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id INTEGER NOT NULL REFERENCES investigation_cases(id) ON DELETE CASCADE,
+    sample_id INTEGER NOT NULL REFERENCES samples(id),
+    measure TEXT NOT NULL CHECK(measure IN ('quarantine','observe')),
+    measure_state TEXT NOT NULL CHECK(measure_state IN ('active','released')),
+    basis_json TEXT NOT NULL DEFAULT '[]',
+    previous_lifecycle_state TEXT,
+    disposition_note TEXT,
+    disposition_by INTEGER REFERENCES users(id),
+    disposition_at TEXT,
+    applied_by INTEGER NOT NULL REFERENCES users(id),
+    applied_at TEXT NOT NULL,
+    released_by INTEGER REFERENCES users(id),
+    released_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(case_id, sample_id)
+);
+CREATE INDEX IF NOT EXISTS idx_investigation_samples_case ON investigation_case_samples(case_id, measure_state, sample_id);
+
+CREATE TABLE IF NOT EXISTS investigation_evidence (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id INTEGER NOT NULL REFERENCES investigation_cases(id) ON DELETE CASCADE,
+    version_no INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    source_uri TEXT,
+    recorded_by INTEGER NOT NULL REFERENCES users(id),
+    recorded_at TEXT NOT NULL,
+    UNIQUE(case_id, version_no)
+);
+
+CREATE TABLE IF NOT EXISTS investigation_steps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id INTEGER NOT NULL REFERENCES investigation_cases(id) ON DELETE CASCADE,
+    step_no INTEGER NOT NULL,
+    description TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('pending','done')),
+    due_at TEXT,
+    completed_by INTEGER REFERENCES users(id),
+    completed_at TEXT,
+    created_by INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL,
+    UNIQUE(case_id, step_no)
+);
+
+CREATE TABLE IF NOT EXISTS investigation_release_decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id INTEGER NOT NULL REFERENCES investigation_cases(id) ON DELETE CASCADE,
+    decision TEXT NOT NULL CHECK(decision IN ('approved','rejected')),
+    comment TEXT NOT NULL DEFAULT '',
+    decided_by INTEGER NOT NULL REFERENCES users(id),
+    decided_at TEXT NOT NULL
+);
 """
 
 PERMISSIONS = [

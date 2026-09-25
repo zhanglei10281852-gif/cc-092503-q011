@@ -28,7 +28,7 @@ class JobService:
             raise ConflictError("后台任务去重键冲突") from exc
         return dict(self.connection.execute("SELECT * FROM background_jobs WHERE id=?", (cursor.lastrowid,)).fetchone())
 
-    def claim(self, worker: str, *, lease_seconds: int = 60) -> dict | None:
+    def claim(self, worker: str, *, lease_seconds: int = 60, job_types: tuple[str, ...] | None = None) -> dict | None:
         now = self.clock.now()
         stale = to_storage(now - timedelta(seconds=lease_seconds))
         self.connection.execute(
@@ -36,9 +36,15 @@ class JobService:
             "WHERE status='running' AND locked_at<?",
             (to_storage(now), stale),
         )
+        type_filter = ""
+        params: list = [to_storage(now)]
+        if job_types:
+            type_filter = " AND job_type IN (" + ",".join("?" for _ in job_types) + ")"
+            params.extend(job_types)
         row = self.connection.execute(
-            "SELECT * FROM background_jobs WHERE status='pending' AND available_at<=? "
-            "ORDER BY available_at,id LIMIT 1", (to_storage(now),)
+            "SELECT * FROM background_jobs WHERE status='pending' AND available_at<=?" + type_filter
+            + " ORDER BY available_at,id LIMIT 1",
+            tuple(params),
         ).fetchone()
         if row is None:
             return None

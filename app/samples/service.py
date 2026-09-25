@@ -222,7 +222,8 @@ class LoanService:
         )
         self.connection.execute(
             """UPDATE samples SET reserved_quantity=reserved_quantity-?,
-               lifecycle_state=CASE WHEN reserved_quantity-?=0 THEN CASE WHEN quantity=0 THEN 'consumed' ELSE 'available' END ELSE 'loaned' END,
+               lifecycle_state=CASE WHEN lifecycle_state='quarantined' THEN 'quarantined'
+                   WHEN reserved_quantity-?=0 THEN CASE WHEN quantity=0 THEN 'consumed' ELSE 'available' END ELSE 'loaned' END,
                version=version+1,updated_at=? WHERE id=?""",
             (data["quantity"], data["quantity"], now, loan["sample_id"]),
         )
