@@ -13,7 +13,8 @@
 - 位置脱敏：普通权限只能看到受限位置的替代码，授权人员可查看精确位置。
 - 双人审批：高风险操作要求申请人与审批人分离，并累计不同审批人的决定。
 - 异常追踪：异常可以关联样品或接收批次，保存严重度和处理状态。
-- 审计与任务：关键身份及业务操作留痕，后台任务支持去重、领取与完成。
+- 调查案件：把多条异常归并为可关联的调查案件，按接收批次、保管位置、谱系祖先和时间窗口生成候选关联，人工确认后统一执行隔离或观察措施。案件保存假设、追加式证据版本、责任人、处置步骤与截止时间；严重度只能单调升级，乐观锁版本防止旧更新覆盖。结案前必须逐项解释受影响样品、完成全部处置步骤，并由另一名人员批准解除措施，隔离样品自动恢复原状态。
+- 审计与任务：关键身份及业务操作留痕，后台任务支持去重、领取与完成；逾期巡检与关联扫描任务使用自然唯一键和幂等日志，重复执行安全。
 
 ## 运行环境
 
@@ -61,3 +62,12 @@ python -m compileall -q app tests
 ```bash
 python -m app.cli smoke
 ```
+
+## 调查案件流程
+
+1. 登记异常后创建案件（`POST /api/investigations`，可直接携带 `anomaly_ids`），填写假设、严重度、责任人和截止时间。
+2. 用 `POST /api/investigations/associations/preview` 按批次/位置/谱系/时间窗口预览候选（返回每条候选的关联依据 `basis`），确认后用 `.../associations/import` 导入为候选；也可经 `.../associations/scan-jobs` 投递后台扫描任务，重复扫描只做 upsert，不产生重复候选。
+3. 通过 `affected/confirm` 人工确认受影响样品并指定措施（`quarantine` 隔离或 `observe` 观察），`measures/apply` 统一执行；隔离会记录样品原状态，重放请求返回 `replayed`。
+4. 追加证据（`evidence`，支持 `idempotency_key`，版本号单调递增）与处置步骤（`actions`，`step_code` 幂等）。
+5. 全部样品逐项 `explain`、步骤全部完成后才能 `closure/request`；解除措施必须由责任人、申请人和创建人之外的另一名具备 `investigations.approve_release` 权限的人员 `closure/decision` 批准，批准后自动解除隔离并恢复样品状态。
+6. `GET /api/investigations` 支持 `overdue`、`state`、`owner_user_id` 过滤，列表与详情稳定展示关联依据、逾期标记和未完成动作数量。
